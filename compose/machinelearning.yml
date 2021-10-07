@@ -1,0 +1,24 @@
+version: "3.7"
+services:
+
+  ml:
+    build:
+      context: ${ML_SOURCE}/extensions/ml_service
+      target: mlbase
+    container_name: totara_ml
+    ports:
+      - "5000:5000"
+    environment:
+      ML_DEV: 1
+      ML_TOTARA_URL: ${ML_TOTARA_URL}
+      ML_TOTARA_KEY: ${ML_TOTARA_KEY}
+      ML_LOGS_DIR: /etc/ml-data/logs
+      ML_MODELS_DIR: /etc/ml-data/models
+    volumes:
+      - mldev-data:/etc/ml-data
+      - ${ML_SOURCE}/extensions/ml_service:/etc/ml
+    networks:
+      - totara
+
+volumes:
+  mldev-data:
