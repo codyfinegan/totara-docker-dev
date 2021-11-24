@@ -383,7 +383,7 @@ services:
       TZ: ${TIME_ZONE}
       XDEBUG_CONFIG: client_host=${HOST_IP}
       XDEBUG_SESSION: totara73
-      PHP_IDE_CONFIG: serverName=totara73
+      PHP_IDE_CONFIG: serverName=totara.debug
       HIST_FILE: /root/.bash_history
       DISABLE_AUTO_UPDATE: "true" # disables oh-my-zsh update message
     volumes:

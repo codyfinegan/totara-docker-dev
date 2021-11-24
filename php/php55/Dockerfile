@@ -20,8 +20,6 @@ RUN phpbrew install -j $(nproc) $PHPVERSION \
     +exif \
     -- \
     --enable-gd-native-ttf \
-    --with-fpm-group=www-data \
-    --with-fpm-user=www-data \
     --with-freetype-dir \
     --with-gd \
     --with-jpeg-dir=/usr \

@@ -1,0 +1,18 @@
+#!/bin/bash
+
+SCRIPTPATH="$( cd "$(dirname "$0")" ; pwd -P )"
+
+PROJECT=$(php -r 'echo preg_match("#totara/(testing(-12)?|development|demo|moodle|subs)#i", __DIR__, $matches) ? $matches[1] : "";')
+
+if [[ "x$PROJECT" == "x" ]]; then
+  PROJECT=""
+fi
+
+IMAGE="php-$1"
+
+if [[ "$IMAGE" == "php-" ]]; then
+  IMAGE="php-7.3"
+fi
+
+
+$SCRIPTPATH/tdocker exec -w "/var/www/totara/src/${PROJECT}" "${IMAGE}" /bin/zsh

@@ -2,24 +2,50 @@ version: "3.7"
 services:
 
   nginx:
-    image: totara/docker-dev-nginx
+    # image: totara/docker-dev-nginx
+    build: ./nginx
     container_name: totara_nginx
     environment:
       - TZ=${TIME_ZONE}
       - REMOTE_DATA
       - REMOTE_SRC
     ports:
-      - "80:80"
-      - "443:443"
+      # - "80:80"
+      # - "443:443"
       - "8443:8443" # ngrok only
+      - "8153:8153"
+      - "8154:8154"
+      - "8155:8155"
+      - "8156:8156"
+      - "8170:8170"
+      - "8171:8171"
+      - "8172:8172"
+      - "8173:8173"
+      - "8174:8174"
+      - "8180:8180"
+      - "8181:8181"
+      - "8253:8253"
+      - "8254:8254"
+      - "8255:8255"
+      - "8256:8256"
+      - "8270:8270"
+      - "8271:8271"
+      - "8272:8272"
+      - "8273:8273"
+      - "8274:8274"
+      - "8280:8280"
+      - "8281:8281"
     volumes:
       - ${LOCAL_SRC}:${REMOTE_SRC}
       - totara-data:${REMOTE_DATA}
+      - ./nginx/ssl:/etc/certificates
     depends_on:
       - mailcatcher
     networks:
       totara:
         aliases:
+          - totara.local
+          - totara.debug
           - totara54
           - totara54.debug
           - totara54.behat

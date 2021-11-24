@@ -10,3 +10,4 @@ mutagen.yml.lock
 /custom/*.yaml
 /tools/.update
 .idea/
+/nginx/ssl

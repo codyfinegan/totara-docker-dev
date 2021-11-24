@@ -10,7 +10,7 @@ then
         -days 3650 \
         -nodes \
         -x509 \
-        -subj "/C=US/ST=CA/L=SF/O=Docker-demo/CN=totara" \
+        -subj "/C=US/ST=CA/L=SF/O=Docker-demo/CN=localhost" \
         -keyout /etc/nginx/ssl/domain.key \
         -out /etc/nginx/ssl/domain.crt
 fi
