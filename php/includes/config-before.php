@@ -30,3 +30,5 @@ unset($version_file, $totara_version_matches, $moodle_version_matches);
 
 // Track if Xdebug is enabled
 $DOCKER_DEV->xdebug_enabled = isset($_ENV['XDEBUG_SESSION']);
+// Image variant in the hostname, e.g. 'fips' for totara85fips
+$DOCKER_DEV->php_variant = file_exists('/usr/lib/ssl/openssl-fips.cnf') ? 'fips' : '';

@@ -1,0 +1,25 @@
+# OpenSSL config that runs everything through the FIPS provider.
+# The image sets OPENSSL_CONF to this file. Point OPENSSL_CONF at /usr/lib/ssl/openssl.cnf to run without FIPS.
+
+HOME = .
+openssl_conf = openssl_init
+config_diagnostics = 1
+
+# Written by openssl fipsinstall when the image is built, defines [fips_sect]
+.include /usr/lib/ssl/fipsmodule.cnf
+
+[openssl_init]
+providers = provider_sect
+alg_section = algorithm_sect
+
+# Only fips and base are active, so nothing can fall back to the default provider.
+# base provides the encoders and decoders for reading keys and certificates, it has no crypto.
+[provider_sect]
+fips = fips_sect
+base = base_sect
+
+[base_sect]
+activate = 1
+
+[algorithm_sect]
+default_properties = fips=yes

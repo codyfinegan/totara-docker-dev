@@ -28,6 +28,7 @@ Although this project started as a development environment for Totara Learn it c
    your usual containers. Scanning turns itself on in the PHP 8.4/8.5 containers once clamd's socket is
    reachable. On first start clamd downloads its signatures via freshclam, which can take a few minutes before
    the container is healthy and scanning is active (dev uploads are not blocked meanwhile).
+ * A PHP 8.5 container with OpenSSL in FIPS mode, see [PHP 8.5 with FIPS](#php-85-with-fips)
  * [XHProf](https://github.com/tideways/php-xhprof-extension) for profiling
  * [XDebug](https://xdebug.org/) installed, ready for debugging with your favorite IDE
  * [Excimer](https://www.mediawiki.org/wiki/Excimer) installed, for discovering performance problems
@@ -49,6 +50,28 @@ docker-dev then updates itself to each new release. If you cloned the master bra
 run offers to switch you to the latest release.
 
 **[See the wiki](../../wiki) for detailed documentation on installation and usage.**
+
+### PHP 8.5 with FIPS
+
+The `php-8.5fips` container runs PHP 8.5 with OpenSSL using only the FIPS provider, and SHA-1 is blocked for
+creating signatures. Start it with `tup php-8.5fips` and browse to `totara85fips` (or `totara85fips.debug` for
+Xdebug). Run commands in it by naming it, e.g. `tzsh php-8.5fips`. It is never picked automatically for a site.
+
+What changes in FIPS mode:
+
+ * Anything that goes through OpenSSL: the `openssl_*` functions, HTTPS from PHP streams and curl, and DB
+   connections over TLS. MD5 and other non-FIPS algorithms are not available there.
+ * `openssl_sign()` and other signing with SHA-1 fails. Verifying an existing SHA-1 signature still works, as
+   FIPS allows that for legacy data. SHA-1 digests and HMACs still work.
+
+What does not change: PHP's own `md5()`, `sha1()`, `hash()`, `hash_hmac()`, `random_bytes()` and
+`password_hash()` don't use OpenSSL, so they work as normal.
+
+To compare with FIPS off in the same container, set `OPENSSL_CONF=/usr/lib/ssl/openssl.cnf`.
+
+The FIPS provider is built from the OpenSSL source that matches the image's libssl. It is meant for testing FIPS
+behaviour, it is not a FIPS 140-3 validated build. The image is based on Debian 13, which dropped the library the
+`imap` extension needs, so `imap` is not installed. `sqlsrv` is not installed yet, the same as the PHP 8.5 image.
 
 ## Contribute
 

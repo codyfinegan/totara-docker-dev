@@ -1,0 +1,249 @@
+# PHP 8.5 with OpenSSL running in FIPS mode, with SHA-1 signing blocked.
+#
+# Debian does not ship the OpenSSL FIPS provider, so it is built from the OpenSSL source that matches
+# the libssl in the trixie base image. Trixie is used because its OpenSSL 3.5 runtime understands the
+# fipsinstall options added in 3.4, which bookworm's OpenSSL 3.0 does not. This is for testing FIPS
+# behaviour, it is not a FIPS 140-3 validated build.
+ARG OPENSSL_VERSION=3.5.9
+ARG OPENSSL_SHA256=603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a
+
+FROM debian:trixie-slim AS fips-provider
+
+ARG OPENSSL_VERSION
+ARG OPENSSL_SHA256
+
+RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
+    && apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        build-essential \
+        ca-certificates \
+        curl \
+        perl
+
+WORKDIR /build
+RUN curl -fsSL --retry 5 -o openssl.tar.gz \
+        "https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz" \
+    && echo "${OPENSSL_SHA256}  openssl.tar.gz" | sha256sum -c - \
+    && tar xzf openssl.tar.gz --strip-components=1 \
+    && ./Configure enable-fips \
+    && make -j$(nproc) build_generated \
+    && make -j$(nproc) providers/fips.so
+
+FROM php:8.5-fpm-trixie
+
+ARG TIME_ZONE=Pacific/Auckland
+
+# apt does not retry failed downloads, so a single timed out .deb from the Debian CDN fails
+# the whole build. Older suites go cold in the CDN more often, but any suite can time out.
+RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        apt-transport-https \
+        libfreetype6-dev \
+        libjpeg62-turbo-dev \
+        libwebp-dev \
+        libmcrypt-dev \
+        libpng-dev \
+        libxml2-dev \
+        libicu-dev \
+        libpq-dev \
+        gnupg2 \
+        cron \
+        nano \
+        vim \
+        wget \
+        openssl \
+        locales \
+        tzdata \
+        git \
+        libzip-dev \
+        libmemcached-dev \
+        zip \
+        netcat-traditional \
+        bc \
+        ghostscript \
+        graphviz \
+        aspell \
+        clamdscan \
+        libldap2-dev \
+        libltdl-dev \
+        libkrb5-dev \
+        libssl-dev \
+        libpspell-dev \
+        libenchant-2-dev \
+        hunspell-en-us \
+        hunspell-en-gb \
+        xmlstarlet \
+        libtool \
+        bison
+
+COPY --from=ghcr.io/php/pie:bin /pie /usr/bin/pie
+
+RUN docker-php-ext-install -j$(nproc) \
+        zip \
+        intl \
+        soap \
+        pdo_pgsql \
+        pdo_mysql \
+        pgsql \
+        mysqli \
+        exif \
+        ldap \
+        pcntl \
+        enchant \
+    && docker-php-ext-configure gd \
+            --with-freetype \
+            --with-jpeg \
+            --with-webp \
+    && docker-php-ext-install -j$(nproc) gd
+
+RUN git clone https://github.com/longxinH/xhprof.git ./xhprof \
+    && cd xhprof \
+    && git checkout v2.3.10 \
+    && cd extension/ \
+    && phpize \
+    && ./configure \
+    && make && make install
+
+RUN echo "extension=xhprof.so" >> /usr/local/etc/php/conf.d/xhprof.ini \
+    && echo "xhprof.output_dir = /tmp/xhprof" >> /usr/local/etc/php/conf.d/xhprof.ini
+
+COPY pecl-install.sh /usr/local/bin/totara-pecl-install
+RUN chmod +x /usr/local/bin/totara-pecl-install
+
+RUN totara-pecl-install redis-6.3.0 \
+    &&  rm -rf /tmp/pear \
+    &&  docker-php-ext-enable redis
+
+# 3.2.17RC1 is the first igbinary release that builds on PHP 8.5
+RUN totara-pecl-install igbinary-3.2.17RC1 \
+    &&  rm -rf /tmp/pear \
+    &&  docker-php-ext-enable igbinary
+
+RUN totara-pecl-install memcached-3.4.0 \
+    &&  rm -rf /tmp/pear \
+    &&  docker-php-ext-enable memcached
+
+# No imap: Debian 13 dropped libc-client, which the imap extension needs
+
+RUN totara-pecl-install excimer-1.2.6 \
+    &&  rm -rf /tmp/pear \
+    &&  docker-php-ext-enable excimer
+
+RUN totara-pecl-install pspell-1.0.1 \
+    &&  rm -rf /tmp/pear \
+    &&  docker-php-ext-enable pspell
+
+RUN totara-pecl-install xdebug-3.5.1 \
+    &&  rm -rf /tmp/pear \
+    &&  docker-php-ext-enable xdebug.so
+
+RUN totara-pecl-install pcov-1.0.12 \
+    &&  rm -rf /tmp/pear \
+    &&  docker-php-ext-enable pcov
+
+# Install composer
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+# we need en_US locales for MSSQL connection to work
+# we need en_AU locales for behat to work
+# Extra locales allow testing non-English and RTL formatting
+RUN for locale in \
+        en_US.UTF-8 \
+        en_AU.UTF-8 \
+        de_DE.UTF-8 \
+        fr_FR.UTF-8 \
+        es_ES.UTF-8 \
+        ar_AE.UTF-8 \
+        he_IL.UTF-8; \
+    do \
+        sed -i -e "s/# ${locale} UTF-8/${locale} UTF-8/" /etc/locale.gen; \
+    done && \
+    dpkg-reconfigure --frontend=noninteractive locales && \
+    update-locale LANG=en_US.UTF-8
+
+ENV LANG=en_US.UTF-8
+ENV LANGUAGE=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
+
+# install mssql extension
+# The Debian 13 repo is signed with a newer key than microsoft.asc, the setup package installs both
+RUN curl -fsSL --retry 5 -o /tmp/packages-microsoft-prod.deb https://packages.microsoft.com/config/debian/13/packages-microsoft-prod.deb \
+    && dpkg -i /tmp/packages-microsoft-prod.deb \
+    && rm /tmp/packages-microsoft-prod.deb \
+    && apt-get update && ACCEPT_EULA=Y apt-get install -y \
+    msodbcsql18 \
+    mssql-tools18 \
+    unixodbc-dev
+
+RUN echo 'export PATH="$PATH:/opt/mssql-tools/bin"' >> ~/.bash_profile \
+    && echo 'export PATH="$PATH:/opt/mssql-tools/bin"' >> ~/.bashrc
+
+# TODO: install sqlsrv and pdo_sqlsrv when they support PHP 8.5, see php85/Dockerfile
+
+RUN ln -fs /usr/share/zoneinfo/${TIME_ZONE} /etc/localtime \
+    && dpkg-reconfigure --frontend noninteractive tzdata
+
+COPY config/php.ini /usr/local/etc/php/
+COPY config/fpm.conf /usr/local/etc/php-fpm.d/zz-totara.conf
+COPY config/clamd.conf /etc/clamav/clamd.conf
+
+# Source each .sh file found in the /shell/ folder, always source the default_aliases.sh file first
+RUN echo 'if [[ -e "/root/custom_shell/default-aliases.sh" ]]; then source "/root/custom_shell/default-aliases.sh"; fi' >> ~/.bashrc && \
+  echo 'for f in /root/custom_shell/*.sh; do [[ "$f" != "/root/custom_shell/default-aliases.sh" && -e "$f" ]] && source "$f"; done;' >> ~/.bashrc
+
+# Have the option of using the oh my zsh shell.
+RUN apt-get update && apt-get install -y zsh
+RUN sh -c "$(curl https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" --unattended
+RUN git clone https://github.com/romkatv/powerlevel10k ~/.oh-my-zsh/custom/themes/powerlevel10k
+RUN git clone https://github.com/zsh-users/zsh-autosuggestions ~/.oh-my-zsh/custom/plugins/zsh-autosuggestions
+RUN git clone https://github.com/zsh-users/zsh-completions ~/.oh-my-zsh/custom/plugins/zsh-completions
+RUN git clone https://github.com/zsh-users/zsh-syntax-highlighting ~/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting
+RUN echo 'setopt +o nomatch' > ~/.zshrc
+RUN echo 'source ~/custom_shell/.zshrc' >> ~/.zshrc
+RUN cat ~/.bashrc >> ~/.zshrc
+
+# Distrust the eMudhra (emSign) root CAs and Sectigo's AAA Certificate Services root. In October 2026
+# the private keys of six eMudhra TLS intermediate CAs were found to be trivially recoverable. They were
+# issued by emSign Root TLS CA - G3, which chains to emSign ECC Root CA - G3, and were cross-signed by
+# AAA Certificate Services. Older Debian CA bundles still trust both roots, and PHP and curl do not check
+# revocation. The other emSign roots are distrusted as a precaution. Where an entry is absent this
+# changes nothing. The build fails if any of these roots is still in the trusted bundle afterwards, or if
+# the bundle cannot be read.
+RUN sed -i -E 's#^(mozilla/emSign_.*|mozilla/Comodo_AAA_Services_root\.crt)$#!\1#' /etc/ca-certificates.conf \
+    && update-ca-certificates --fresh \
+    && openssl crl2pkcs7 -nocrl -certfile /etc/ssl/certs/ca-certificates.crt \
+        | openssl pkcs7 -print_certs -noout > /tmp/ca-subjects \
+    && grep -q '^subject=' /tmp/ca-subjects \
+    && ! grep -qE '^subject=.*(emSign|AAA Certificate Services)' /tmp/ca-subjects \
+    && rm /tmp/ca-subjects
+
+COPY smoke-test.sh /usr/local/bin/totara-php-smoke-test
+RUN chmod +x /usr/local/bin/totara-php-smoke-test \
+    && /usr/local/bin/totara-php-smoke-test
+
+# Install the FIPS provider and turn FIPS mode on. This is done last so apt, pecl and git above run
+# without it. fipsinstall writes the module checksum and config, -signature_digest_check makes the
+# provider refuse SHA-1 for creating signatures. Verifying existing SHA-1 signatures is still allowed.
+COPY --from=fips-provider /build/providers/fips.so /tmp/fips.so
+COPY php85fips/openssl-fips.cnf /usr/lib/ssl/openssl-fips.cnf
+RUN modules_dir=$(openssl version -m | sed -E 's/^MODULESDIR: "(.*)"$/\1/') \
+    && install -m 644 /tmp/fips.so "${modules_dir}/fips.so" \
+    && rm /tmp/fips.so \
+    && openssl fipsinstall \
+        -module "${modules_dir}/fips.so" \
+        -out /usr/lib/ssl/fipsmodule.cnf \
+        -signature_digest_check
+
+# Point OPENSSL_CONF at /usr/lib/ssl/openssl.cnf to run without FIPS
+ENV OPENSSL_CONF=/usr/lib/ssl/openssl-fips.cnf
+
+COPY php85fips/fips-smoke-test.sh /usr/local/bin/totara-php-fips-smoke-test
+RUN chmod +x /usr/local/bin/totara-php-fips-smoke-test \
+    && /usr/local/bin/totara-php-fips-smoke-test
+
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT [ "/entrypoint.sh" ]

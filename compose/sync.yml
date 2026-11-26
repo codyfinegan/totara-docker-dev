@@ -115,6 +115,14 @@ services:
     volumes:
       - totara-www-sync:${REMOTE_SRC}:nocopy
 
+  php-8.5fips:
+    volumes:
+      - totara-www-sync:${REMOTE_SRC}:nocopy
+
+  php-8.5fips-debug:
+    volumes:
+      - totara-www-sync:${REMOTE_SRC}:nocopy
+
   # php-X.X: ...
   # php-X.X-debug: ...
 

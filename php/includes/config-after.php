@@ -57,7 +57,7 @@ if (!is_dir($CFG->behat_dataroot)) {
  * The wwwroot for behat is the same as the host, but with '.behat' added as a suffix (so 'totara73' becomes 'totara73.behat')
  * You shouldn't really need to change this.
  */
-$CFG->behat_wwwroot = 'http://totara' . PHP_MAJOR_VERSION . PHP_MINOR_VERSION . '.behat';
+$CFG->behat_wwwroot = 'http://totara' . PHP_MAJOR_VERSION . PHP_MINOR_VERSION . $DOCKER_DEV->php_variant . '.behat';
 if ($DOCKER_DEV->xdebug_enabled) {
     $CFG->behat_wwwroot .= '.debug';
 }
@@ -278,7 +278,7 @@ if (!empty($_SERVER['HTTP_X_FORWARDED_HOST']) && preg_match($ngrok_hostname_rege
     }
 } else {
     // accessing it via CLI
-    $CFG->wwwroot = 'http://totara' . PHP_MAJOR_VERSION . PHP_MINOR_VERSION;
+    $CFG->wwwroot = 'http://totara' . PHP_MAJOR_VERSION . PHP_MINOR_VERSION . $DOCKER_DEV->php_variant;
     if ($DOCKER_DEV->xdebug_enabled) {
         $CFG->wwwroot .= '.debug';
     }
